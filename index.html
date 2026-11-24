@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="it" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="LexisC1" />
+  <title>LexisC1 Studio — B2/C1 Mobile Flashcards</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Safe-area & Dynamic Viewport Layout (100dvh) */
+    :root {
+      --sat: env(safe-area-inset-top, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100dvh;
+      max-height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior-y: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      padding-top: var(--sat);
+      padding-bottom: var(--sab);
+    }
+
+    /* Hide horizontal scrollbars on pill bars while preserving touch scrolling */
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* 3D Flashcard Flip Mechanics */
+    .perspective-1200 {
+      perspective: 1200px;
+    }
+    .preserve-3d {
+      transform-style: preserve-3d;
+      transition: transform 0.48s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .rotate-y-180 {
+      transform: rotateY(180deg);
+    }
+    .backface-hidden {
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+
+    /* Fluid Typography using clamp() */
+    .fluid-card-title {
+      font-size: clamp(1.35rem, 4.8vw, 2.25rem);
+      line-height: 1.25;
+    }
+    .fluid-card-hint {
+      font-size: clamp(0.875rem, 2.6vw, 1rem);
+      line-height: 1.5;
+    }
+
+    /* Tactile active press feedback */
+    .tap-btn {
+      transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease;
+      touch-action: manipulation;
+    }
+    .tap-btn:active {
+      transform: scale(0.96);
+    }
+
+    /* Swipe visual feedback on card wrapper */
+    #card-wrapper {
+      touch-action: pan-y;
+      transition: transform 0.18s ease-out, opacity 0.18s ease-out;
+    }
+
+    /* Subtle internal scrollbar for card faces */
+    .card-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    .card-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .card-scroll::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.35);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col select-none">
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed top-14 left-1/2 -translate-x-1/2 -translate-y-20 opacity-0 pointer-events-none z-50 px-4 py-2 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold shadow-lg transition-all duration-300">
+    Salvato nell'Archivio!
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 1. COMPACT STICKY TOP HEADER                                          -->
+  <!-- ===================================================================== -->
+  <header class="shrink-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 z-30">
+    <div class="max-w-4xl mx-auto px-3 sm:px-5 h-12 sm:h-14 flex items-center justify-between gap-2">
+      
+      <!-- Brand + Compact Counter -->
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold font-mono text-xs shrink-0 shadow-sm">
+          C1
+        </div>
+        <div class="truncate">
+          <div class="flex items-center gap-1.5">
+            <h1 class="font-bold text-sm sm:text-base tracking-tight truncate">LexisC1</h1>
+            <span class="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+              <span id="stat-current">1</span>/<span id="stat-total">50</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Controls: + Crea, UK/US, Rate, Theme, Shortcuts -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <!-- Manual Add Button -->
+        <button type="button" onclick="openCreatorModal()" class="tap-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold shadow-xs" title="Aggiungi flashcard o appunti">
+          <span>+ Crea</span>
+        </button>
+
+        <!-- Session Mini Counters -->
+        <div class="hidden sm:flex items-center gap-1.5 mx-1 font-mono text-[11px]">
+          <span class="text-rose-600 dark:text-rose-400" title="Da ripassare">↻<strong id="stat-again">0</strong></span>
+          <span class="text-amber-600 dark:text-amber-400" title="Quasi">~<strong id="stat-hard">0</strong></span>
+          <span class="text-emerald-600 dark:text-emerald-400" title="Padroneggiata">✓<strong id="stat-mastered">0</strong></span>
+        </div>
+
+        <!-- UK / US Accent Toggle -->
+        <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200/70 dark:border-slate-700/70">
+          <button type="button" id="btn-accent-gb" onclick="setAccent('en-GB')" class="tap-btn px-2 py-1 rounded-md text-[11px] font-mono font-bold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs" title="British English">
+            UK
+          </button>
+          <button type="button" id="btn-accent-us" onclick="setAccent('en-US')" class="tap-btn px-2 py-1 rounded-md text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400" title="American English">
+            US
+          </button>
+        </div>
+
+        <!-- Speech Speed -->
+        <button type="button" id="btn-rate" onclick="cycleSpeechRate()" class="tap-btn px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700/70" title="Velocità audio">
+          1.0x
+        </button>
+
+        <!-- Theme Toggle -->
+        <button type="button" onclick="toggleTheme()" class="tap-btn p-1.5 sm:p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700/70" title="Tema Chiaro/Scuro" aria-label="Cambia tema">
+          <svg class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg class="w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+
+        <!-- Desktop Shortcuts Info -->
+        <button type="button" onclick="toggleShortcutsModal()" class="hidden sm:flex tap-btn p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700/70" title="Scorciatoie tastiera">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Thin Segmented Progress Bar -->
+    <div class="w-full h-1 bg-slate-200/80 dark:bg-slate-800 flex overflow-hidden">
+      <div id="bar-mastered" class="bg-emerald-500 h-full transition-all duration-300" style="width: 0%"></div>
+      <div id="bar-hard" class="bg-amber-400 h-full transition-all duration-300" style="width: 0%"></div>
+      <div id="bar-again" class="bg-rose-500 h-full transition-all duration-300" style="width: 0%"></div>
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- 2. HORIZONTALLY SCROLLABLE MODE & FILTER PILL BARS                    -->
+  <!-- ===================================================================== -->
+  <nav class="shrink-0 bg-white dark:bg-slate-900/60 border-b border-slate-200/70 dark:border-slate-800/80">
+    <div class="max-w-4xl mx-auto px-3 sm:px-5 py-2 flex flex-col gap-1.5">
+      
+      <!-- Row 1: Primary Modes (Single Horizontal Scroll Row) -->
+      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <button type="button" onclick="switchMode('daily')" id="tab-daily" class="mode-tab tap-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-600 text-white shadow-xs">
+          ✨ Daily Mix (50)
+        </button>
+        <button type="button" onclick="switchMode('live')" id="tab-live" class="mode-tab tap-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          🌐 Live Stream
+        </button>
+        <button type="button" onclick="switchMode('grammar')" id="tab-grammar" class="mode-tab tap-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          ⚡ C1 Grammar
+        </button>
+        <button type="button" onclick="switchMode('vault')" id="tab-vault" class="mode-tab tap-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          📚 Core Vault (<span id="vault-total-badge">65</span>)
+        </button>
+        <button type="button" onclick="switchMode('saved')" id="tab-saved" class="mode-tab tap-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          ⭐ Salvate (<span id="saved-total-badge">0</span>)
+        </button>
+      </div>
+
+      <!-- Row 2: Contextual Filters + Nuovo Set Action -->
+      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <button type="button" onclick="regenerateCurrentDeck()" class="tap-btn shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <span id="btn-regenerate-label">Nuovo Set</span>
+        </button>
+
+        <button type="button" onclick="shuffleCurrentDeck()" class="tap-btn shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          🔀 Mescola
+        </button>
+
+        <div class="h-3.5 w-[1px] bg-slate-200 dark:bg-slate-700 shrink-0 mx-0.5"></div>
+
+        <!-- Dynamic Contextual Sub-pills -->
+        <div id="sub-controls-left" class="flex items-center gap-1.5 shrink-0"></div>
+      </div>
+
+    </div>
+  </nav>
+
+  <!-- ===================================================================== -->
+  <!-- 3. CENTRAL FLEX STAGE: TOUCH-FRIENDLY 3D FLASHCARD                    -->
+  <!-- ===================================================================== -->
+  <main class="flex-1 min-h-0 max-w-4xl w-full mx-auto px-3 sm:px-5 py-2.5 sm:py-4 flex flex-col justify-center relative">
+    
+    <!-- Loading Overlay (Only triggered manually when refreshing Live Stream) -->
+    <div id="loading-state" class="hidden w-full h-full rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 flex flex-col items-center justify-center text-center shadow-sm">
+      <div class="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3 animate-spin">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      </div>
+      <h2 class="font-bold text-base sm:text-lg">Caricamento Database Live...</h2>
+      <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-xs mt-1">Connessione a Datamuse & Free Dictionary API per lemmi C1/C2 e trascrizioni IPA.</p>
+    </div>
+
+    <!-- 3D Card Container with Swipe & Tap Support -->
+    <div id="card-wrapper" class="w-full h-full max-h-[560px] perspective-1200 cursor-pointer" onclick="handleCardClick(event)">
+      <div id="flashcard-inner" class="relative w-full h-full preserve-3d">
+        
+        <!-- ================= FRONT OF CARD ================= -->
+        <div class="absolute inset-0 backface-hidden rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-md dark:shadow-none flex flex-col overflow-hidden">
+          
+          <!-- Front Top Bar -->
+          <div class="shrink-0 px-4 sm:px-7 pt-4 sm:pt-6 pb-2 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span id="front-badge-source" class="shrink-0 px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-mono font-bold bg-indigo-50 dark:bg-indigo-950/90 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
+                DAILY MIX
+              </span>
+              <span id="front-badge-category" class="truncate px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800">
+                Idiom • C1
+              </span>
+            </div>
+
+            <!-- Right Action Buttons: Save Star + Native Audio -->
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" id="btn-star-front" onclick="toggleSaveCurrentCard(event)" class="tap-btn shrink-0 w-11 h-11 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center border border-slate-200/70 dark:border-slate-700/70 text-lg" title="Salva negli appunti (S)" aria-label="Salva carta">
+                ☆
+              </button>
+              <button type="button" onclick="speakFront(event)" class="tap-btn shrink-0 w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600 dark:text-indigo-300 flex items-center justify-center border border-indigo-200/50 dark:border-indigo-800/50" title="Ascolta pronuncia (A)" aria-label="Ascolta pronuncia">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Front Scrollable Center Body -->
+          <div class="flex-1 min-h-0 overflow-y-auto card-scroll px-4 sm:px-8 py-2 flex flex-col items-center justify-center text-center select-text">
+            <p id="front-kicker" class="text-[10px] sm:text-xs font-mono uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+              ESPRESSIONE / VOCABOLO
+            </p>
+
+            <h2 id="front-main-text" class="fluid-card-title font-extrabold tracking-tight text-slate-900 dark:text-white max-w-2xl">
+              Bite the bullet
+            </h2>
+
+            <p id="front-phonetic" class="mt-1.5 font-mono text-xs sm:text-sm text-indigo-600 dark:text-indigo-400">
+              /baɪt ðə ˈbʊl.ɪt/
+            </p>
+
+            <!-- Context / Hint Box -->
+            <div class="mt-4 px-3.5 py-2.5 sm:px-5 sm:py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/70 max-w-xl w-full">
+              <p id="front-hint-text" class="fluid-card-hint text-slate-600 dark:text-slate-300 italic">
+                "We have delayed the decision for months, so now we must bite the bullet and announce the restructuring."
+              </p>
+            </div>
+
+            <!-- Active Recall Input -->
+            <div id="active-recall-box" class="hidden mt-4 w-full max-w-md" onclick="event.stopPropagation()">
+              <div class="flex gap-2">
+                <input
+                  id="recall-input"
+                  type="text"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  placeholder="Scrivi la risposta..."
+                  class="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[16px] font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  onkeydown="if(event.key==='Enter'){ event.preventDefault(); checkRecallAnswer(); }"
+                />
+                <button type="button" onclick="checkRecallAnswer()" class="tap-btn shrink-0 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">
+                  Verifica
+                </button>
+              </div>
+              <p id="recall-feedback" class="mt-1.5 text-xs font-mono font-semibold min-h-[18px]"></p>
+            </div>
+          </div>
+
+          <!-- Front Bottom Hint Bar -->
+          <div class="shrink-0 px-4 sm:px-7 py-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
+            <span id="front-register" class="font-mono truncate max-w-[55%]">Idiomatic / Neutral</span>
+            <span class="font-medium text-indigo-600 dark:text-indigo-400 shrink-0">Tocca per girare • Swipe ⇄</span>
+          </div>
+        </div>
+
+        <!-- ================= BACK OF CARD ================= -->
+        <div class="absolute inset-0 backface-hidden rotate-y-180 rounded-3xl bg-white dark:bg-slate-900 border-2 border-indigo-500/40 dark:border-indigo-500/30 shadow-lg flex flex-col overflow-hidden">
+          
+          <!-- Back Top Bar -->
+          <div class="shrink-0 px-4 sm:px-7 pt-4 sm:pt-5 pb-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <h3 id="back-title" class="text-base sm:text-xl font-bold text-indigo-600 dark:text-indigo-400 truncate">Bite the bullet</h3>
+                <span id="back-pos" class="shrink-0 text-[10px] sm:text-xs font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">idiom</span>
+              </div>
+              <p id="back-ipa" class="text-[11px] font-mono text-slate-400 truncate">/baɪt ðə ˈbʊl.ɪt/</p>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" id="btn-star-back" onclick="toggleSaveCurrentCard(event)" class="tap-btn shrink-0 w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center border border-slate-200/70 dark:border-slate-700/70 text-lg" title="Salva negli appunti">
+                ☆
+              </button>
+              <button type="button" onclick="speakBack(event)" class="tap-btn shrink-0 inline-flex items-center gap-1.5 px-3 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/90 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-200/50 dark:border-indigo-800/50" title="Ascolta esempio">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                <span>Esempio</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Back Internal Scrollable Body -->
+          <div class="flex-1 min-h-0 overflow-y-auto card-scroll px-4 sm:px-7 py-3.5 space-y-3 text-left select-text">
+            
+            <!-- Italian Translation / Solution -->
+            <div>
+              <span class="text-[10px] font-mono uppercase tracking-wider text-slate-400 block mb-0.5">Significato / Soluzione</span>
+              <p id="back-translation" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-snug">
+                Stringere i denti / Affrontare una situazione spiacevole con coraggio
+              </p>
+            </div>
+
+            <!-- Definition & C1 Nuance -->
+            <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/75 border border-slate-200/70 dark:border-slate-700/70">
+              <span class="text-[10px] font-mono uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block mb-0.5">Definizione & Regola C1</span>
+              <p id="back-definition" class="text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
+                To force yourself to do something unpleasant or difficult that you have been avoiding.
+              </p>
+            </div>
+
+            <!-- Example in Context -->
+            <div class="p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/50">
+              <span class="text-[10px] font-mono uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block mb-0.5">Esempio in Contesto</span>
+              <p id="back-example" class="text-xs sm:text-sm text-slate-800 dark:text-slate-100 italic leading-relaxed">
+                "We have delayed the decision for months, so now we must bite the bullet and announce the restructuring."
+              </p>
+            </div>
+
+          </div>
+
+          <!-- Back Bottom Hint -->
+          <div class="shrink-0 px-4 sm:px-7 py-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Tocca ☆ in alto per salvare</span>
+            <span class="text-indigo-600 dark:text-indigo-400 font-medium">Valuta sotto per continuare ↓</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- 4. BOTTOM ERGONOMIC SRS & NAVIGATION DOCK                             -->
+  <!-- ===================================================================== -->
+  <footer class="shrink-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 z-30">
+    <div class="max-w-4xl mx-auto px-3 sm:px-5 py-2 sm:py-2.5 flex flex-col gap-2">
+      
+      <!-- SRS Rating Buttons -->
+      <div class="grid grid-cols-3 gap-2">
+        <button type="button" onclick="rateCard('again')" class="tap-btn h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5">
+          <span>↻</span>
+          <span>Ripassa</span>
+        </button>
+        <button type="button" onclick="rateCard('hard')" class="tap-btn h-11 rounded-xl bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5">
+          <span>~</span>
+          <span>Quasi</span>
+        </button>
+        <button type="button" onclick="rateCard('good')" class="tap-btn h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5">
+          <span>✓</span>
+          <span>Padroneggiata</span>
+        </button>
+      </div>
+
+      <!-- Prev / Flip / Next Row -->
+      <div class="grid grid-cols-4 gap-2">
+        <button type="button" onclick="prevCard()" class="tap-btn h-11 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1">
+          <span>←</span>
+          <span>Prec</span>
+        </button>
+        <button type="button" onclick="flipCard()" class="tap-btn col-span-2 h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5">
+          <span>Gira Carta</span>
+        </button>
+        <button type="button" onclick="nextCard()" class="tap-btn h-11 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1">
+          <span>Succ</span>
+          <span>→</span>
+        </button>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- ===================================================================== -->
+  <!-- 5. MANUAL CARD & NOTES CREATOR MODAL                                  -->
+  <!-- ===================================================================== -->
+  <div id="creator-modal" class="hidden fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-3">
+    <div class="w-full max-w-lg max-h-[88dvh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl space-y-4">
+      
+      <div class="flex items-center justify-between">
+        <h2 class="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white">+ Aggiungi alle tue Flashcard</h2>
+        <button type="button" onclick="closeCreatorModal()" class="tap-btn w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm">✕</button>
+      </div>
+
+      <!-- Mode Switcher inside Modal -->
+      <div class="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+        <button type="button" id="m-tab-single" onclick="switchCreatorTab('single')" class="py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs">
+          Carta Singola
+        </button>
+        <button type="button" id="m-tab-bulk" onclick="switchCreatorTab('bulk')" class="py-2 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400">
+          Incolla Appunti (Multiplo)
+        </button>
+      </div>
+
+      <!-- Single Card Form -->
+      <div id="creator-single-form" class="space-y-3">
+        <div>
+          <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1">Termine / Espressione (EN) *</label>
+          <input id="in-term" type="text" placeholder="es. Bite the bullet / Ubiquitous" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[16px] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1">Significato / Traduzione (IT) *</label>
+          <input id="in-translation" type="text" placeholder="es. Stringere i denti / Onnipresente" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[16px] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1">Definizione / Nota (Opzionale)</label>
+          <input id="in-definition" type="text" placeholder="es. Formal adjective used in academic essays" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[16px] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1">Frase di Esempio (Opzionale)</label>
+          <input id="in-example" type="text" placeholder="es. Smartphones are ubiquitous in modern society." class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[16px] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1">Categoria</label>
+          <select id="in-category" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[16px] text-slate-900 dark:text-white">
+            <option value="Appunti">Appunti Personali</option>
+            <option value="Vocabulary">Vocabulary</option>
+            <option value="Idiom">Idiom</option>
+            <option value="Phrasal Verb">Phrasal Verb</option>
+            <option value="C1 Grammar">C1 Grammar</option>
+          </select>
+        </div>
+        <button type="button" onclick="saveSingleManualCard()" class="tap-btn w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-sm">
+          Salva nella sezione ⭐ Salvate
+        </button>
+      </div>
+
+      <!-- Bulk Notes Form -->
+      <div id="creator-bulk-form" class="hidden space-y-3">
+        <div>
+          <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1">Incolla i tuoi appunti (1 riga = 1 flashcard)</label>
+          <textarea id="in-bulk" rows="5" placeholder="Formato: Inglese - Italiano | Esempio (opzionale)&#10;To cut corners - Fare le cose al risparmio&#10;Albeit : Sebbene, anche se&#10;Mitigate = Attenuare | Trees mitigate urban heat." class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[16px] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          Separa termine e traduzione con <b>-</b>, <b>:</b> oppure <b>=</b>. Se aggiungi <b>|</b> puoi includere anche la frase d'esempio.
+        </p>
+        <button type="button" onclick="saveBulkManualCards()" class="tap-btn w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-sm">
+          Importa tutte in ⭐ Salvate
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div id="shortcuts-modal" class="hidden fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4" onclick="toggleShortcutsModal()">
+    <div class="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl space-y-3" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-base">Scorciatoie Tastiera</h3>
+        <button type="button" onclick="toggleShortcutsModal()" class="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold">✕</button>
+      </div>
+      <div class="space-y-2 text-xs font-mono">
+        <div class="flex justify-between"><span>Gira carta</span><kbd class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">Spazio</kbd></div>
+        <div class="flex justify-between"><span>Precedente / Successiva</span><kbd class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">← / →</kbd></div>
+        <div class="flex justify-between"><span>Pronuncia audio</span><kbd class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">A</kbd></div>
+        <div class="flex justify-between"><span>Salva / Rimuovi stella</span><kbd class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">S</kbd></div>
+        <div class="flex justify-between"><span>Valutazione SRS</span><kbd class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">1 / 2 / 3</kbd></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 6. APPLICATION LOGIC & DATASETS                                       -->
+  <!-- ===================================================================== -->
+  <script>
+    // -----------------------------------------------------------------------
+    // A. CORE VAULT DATASET (65 C1/B2 IDIOMS, PHRASAL VERBS & ACADEMIC TERMS)
+    // -----------------------------------------------------------------------
+    const CORE_VAULT = [
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Idiomatic / Neutral", main: "Bite the bullet", ipa: "/baɪt ðə ˈbʊl.ɪt/", translation: "Stringere i denti / Affrontare una situazione spiacevole inevitabile", definition: "To force yourself to do something unpleasant or difficult that you have been avoiding.", example: "We have delayed the decision for months, so now we must bite the bullet and announce the restructuring." },
+      { source: "CORE VAULT", category: "Idiom • B2", pos: "idiom", register: "Idiomatic / Neutral", main: "A blessing in disguise", ipa: "/ə ˈbles.ɪŋ ɪn dɪsˈɡaɪz/", translation: "Un male che non viene per nuocere", definition: "An apparent misfortune that eventually has good results.", example: "Losing that job turned out to be a blessing in disguise because it pushed me to start my own company." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Formal / Neutral", main: "Err on the side of caution", ipa: "/ɜːr ɒn ðə saɪd əv ˈkɔː.ʃən/", translation: "Peccare di prudenza / Essere fin troppo cauti", definition: "To be especially careful rather than taking a risk.", example: "The forecast looks clear, but let's err on the side of caution and pack waterproof jackets." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Cut corners", ipa: "/kʌt ˈkɔː.nəz/", translation: "Fare le cose al risparmio / Tagliare sulla qualità", definition: "To do something in the easiest, cheapest, or fastest way, often sacrificing quality.", example: "They cut corners during construction, which led to severe structural leaks two years later." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Informal", main: "Beat around the bush", ipa: "/biːt əˈraʊnd ðə bʊʃ/", translation: "Menare il can per l'aia / Girare intorno al punto", definition: "To avoid talking about what is important or getting to the main point.", example: "Stop beating around the bush and tell me whether my proposal was approved." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Burn the midnight oil", ipa: "/bɜːn ðə ˈmɪd.naɪt ɔɪl/", translation: "Fare le ore piccole studiando o lavorando", definition: "To read, study, or work late into the night.", example: "She has been burning the midnight oil all week to finish her dissertation before the deadline." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Call it a day", ipa: "/kɔːl ɪt ə deɪ/", translation: "Chiudere baracca / Smettere di lavorare per oggi", definition: "To decide to stop working on something, especially because you are tired.", example: "We've been debugging this module for six hours—let's call it a day and resume tomorrow." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Informal", main: "Get out of hand", ipa: "/ɡet aʊt əv hænd/", translation: "Sfuggire di mano", definition: "To become difficult or impossible to control.", example: "What started as a minor disagreement quickly got out of hand." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Hit the nail on the head", ipa: "/hɪt ðə neɪl ɒn ðə hed/", translation: "Cogliere nel segno / Centrare perfettamente il punto", definition: "To describe exactly what is causing a situation or problem.", example: "You hit the nail on the head when you said our onboarding process is too complicated." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Take something with a pinch of salt", ipa: "/teɪk ˈsʌm.θɪŋ wɪð ə pɪntʃ əv sɒlt/", translation: "Prendere qualcosa con le pinze", definition: "To not completely believe something that you are told, because you think it is unlikely to be true.", example: "You should take his financial predictions with a pinch of salt." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "The tip of the iceberg", ipa: "/ðə tɪp əv ði ˈaɪs.bɜːɡ/", translation: "La punta dell'iceberg", definition: "A small, noticeable part of a problem, the total size of which is really much greater.", example: "These reported cases are likely just the tip of the iceberg." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Informal", main: "Sit on the fence", ipa: "/sɪt ɒn ðə fens/", translation: "Stare alla finestra / Non prendere posizione", definition: "To avoid making a decision or choice between two sides.", example: "You can't sit on the fence forever; eventually you have to choose which strategy to back." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Leave no stone unturned", ipa: "/liːv nəʊ stəʊn ʌnˈtɜːnd/", translation: "Non lasciare nulla di intentato", definition: "To do everything possible in order to achieve or find something.", example: "The investigators promised to leave no stone unturned in their search for the truth." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Throw in the towel", ipa: "/θrəʊ ɪn ðə taʊəl/", translation: "Gettare la spugna / Arrendersi", definition: "To admit defeat and stop trying.", example: "After three failed attempts to secure funding, they reluctantly threw in the towel." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Informal", main: "Once in a blue moon", ipa: "/wʌns ɪn ə bluː muːn/", translation: "Una volta ogni morte di papa / Rarissimamente", definition: "Very rarely.", example: "He lives in Sydney now, so we only see him once in a blue moon." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Pull strings", ipa: "/pʊl strɪŋz/", translation: "Muovere le acque / Usare conoscenze influenti", definition: "To secretly use influence or power to get something done.", example: "Her uncle pulled a few strings to get her an interview at the ministry." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Read between the lines", ipa: "/riːd bɪˈtwiːn ðə laɪnz/", translation: "Leggere tra le righe", definition: "To try to understand someone's real feelings or intentions from what they say or write.", example: "Reading between the lines of the press release, it's clear that layoffs are coming." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Jump on the bandwagon", ipa: "/dʒʌmp ɒn ðə ˈbændˌwæɡ.ən/", translation: "Salire sul carro dei vincitori / Seguire la moda", definition: "To join an activity or support an opinion that has become fashionable or successful.", example: "Every tech startup is jumping on the AI bandwagon right now." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Informal", main: "Cost an arm and a leg", ipa: "/kɒst ən ɑːm ənd ə leɡ/", translation: "Costare un occhio della testa", definition: "To be extremely expensive.", example: "Renting a two-bedroom flat in central London costs an arm and a leg." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Go back to the drawing board", ipa: "/ɡəʊ bæk tə ðə ˈdrɔː.ɪŋ bɔːd/", translation: "Ricominciare tutto da capo", definition: "To start planning something again because the first plan failed.", example: "The prototype failed the stress test, so we have to go back to the drawing board." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Formal / Neutral", main: "A double-edged sword", ipa: "/ə ˌdʌb.əlˈedʒd sɔːd/", translation: "Un'arma a doppio taglio", definition: "Something that has both favorable and unfavorable consequences.", example: "Working remotely is a double-edged sword: you gain flexibility, but it's harder to switch off." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Break the ice", ipa: "/breɪk ði aɪs/", translation: "Rompere il ghiaccio", definition: "To make people who have not met before feel more relaxed with each other.", example: "The host organized a quick trivia game to break the ice." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Informal", main: "Spill the beans", ipa: "/spɪl ðə biːnz/", translation: "Svelare il segreto / Vuotare il sacco", definition: "To reveal secret information unintentionally or indiscreetly.", example: "We were planning a surprise party until Jake accidentally spilled the beans." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Weather the storm", ipa: "/ˈweð.ə ðə stɔːm/", translation: "Superare la tempesta / Resistere alle difficoltà", definition: "To successfully deal with a very difficult problem or period.", example: "Only companies with strong cash reserves will weather the economic storm." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "On the same wavelength", ipa: "/ɒn ðə seɪm ˈweɪv.leŋθ/", translation: "Sulla stessa lunghezza d'onda", definition: "Thinking in a similar way and understanding each other well.", example: "Luckily, my co-founder and I are completely on the same wavelength." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Turn a blind eye", ipa: "/tɜːn ə blaɪnd aɪ/", translation: "Chiudere un occhio / Far finta di non vedere", definition: "To ignore something that you know is wrong.", example: "Management turned a blind eye to minor safety breaches until an accident occurred." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Walk a tightrope", ipa: "/wɔːk ə ˈtaɪt.rəʊp/", translation: "Camminare sul filo del rasoio", definition: "To be in a difficult situation where a small mistake could have very bad results.", example: "The central bank is walking a tightrope between curbing inflation and triggering a recession." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Informal", main: "Under the weather", ipa: "/ˈʌn.də ðə ˈweð.ər/", translation: "Giù di corda / Leggermente indisposto", definition: "Feeling slightly ill or low in energy.", example: "I'm feeling a bit under the weather today, so I'll work from home." },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Play devil's advocate", ipa: "/pleɪ ˈdev.əlz ˈæd.və.kət/", translation: "Fare l'avvocato del diavolo", definition: "To pretend to disagree with someone in order to have a good discussion or test an argument.", example: "Let me play devil's advocate for a moment: what if customers refuse to pay a subscription?" },
+      { source: "CORE VAULT", category: "Idiom • C1", pos: "idiom", register: "Neutral", main: "Keep someone in the loop", ipa: "/kiːp ˈsʌm.wʌn ɪn ðə luːp/", translation: "Tenere qualcuno aggiornato", definition: "To keep someone informed about what is happening.", example: "Please keep me in the loop as negotiations progress." },
+
+      // PHRASAL VERBS
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Come across (as)", ipa: "/kʌm əˈkrɒs/", translation: "Dare l'impressione di / Sembrare", definition: "To seem to have particular qualities when people meet or listen to you.", example: "He comes across as arrogant at first, though he's actually quite shy." },
+      { source: "CORE VAULT", category: "Phrasal Verb • B2", pos: "phrasal verb", register: "Neutral", main: "Put up with", ipa: "/pʊt ʌp wɪð/", translation: "Tollerare / Sopportare", definition: "To accept or continue to accept an unpleasant situation or experience.", example: "I don't know how she puts up with that constant noise from the construction site." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Formal / Neutral", main: "Account for", ipa: "/əˈkaʊnt fɔːr/", translation: "Spiegare / Rappresentare (una quota)", definition: "To explain the reason for something, or to form a particular amount or part of something.", example: "Renewable sources now account for over 40% of the country's electricity." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Bring about", ipa: "/brɪŋ əˈbaʊt/", translation: "Causare / Provocare un cambiamento", definition: "To cause something to happen.", example: "The new legislation brought about significant improvements in air quality." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Carry out", ipa: "/ˈkær.i aʊt/", translation: "Condurre / Eseguire (ricerche, test)", definition: "To perform or complete a job, study, or experiment.", example: "Researchers carried out a comprehensive survey of 5,000 households." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Come up with", ipa: "/kʌm ʌp wɪð/", translation: "Escogitare / Proporre (un'idea, soluzione)", definition: "To suggest or think of an idea or plan.", example: "Engineers are racing to come up with a viable alternative to lithium batteries." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Cut down on", ipa: "/kʌt daʊn ɒn/", translation: "Ridurre il consumo di", definition: "To do or use less of something.", example: "Doctors advised him to cut down on processed sugar and caffeine." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Do away with", ipa: "/duː əˈweɪ wɪð/", translation: "Abolire / Eliminare del tutto", definition: "To get rid of or stop using something.", example: "Many universities have done away with traditional paper exams." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Fall through", ipa: "/fɔːl θruː/", translation: "Andare a monte / Fallire (accordi, piani)", definition: "To fail to happen (used about plans or agreements).", example: "The acquisition fell through at the last minute due to regulatory concerns." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Get away with", ipa: "/ɡet əˈweɪ wɪð/", translation: "Passarla liscia / Farla franca", definition: "To succeed in avoiding punishment for something.", example: "They shouldn't be allowed to get away with violating environmental regulations." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Give rise to", ipa: "/ɡɪv raɪz tuː/", translation: "Dare origine a / Suscitare", definition: "To cause something to happen or exist.", example: "Rapid urbanization has given rise to severe housing shortages." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Make up for", ipa: "/meɪk ʌp fɔːr/", translation: "Compensare / Rimediare a", definition: "To take the place of something lost or damaged, or to compensate for something bad.", example: "Her enthusiasm more than makes up for her lack of formal experience." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Phase out", ipa: "/feɪz aʊt/", translation: "Eliminare gradualmente", definition: "To remove or stop using something gradually over a period of time.", example: "Several European countries plan to phase out petrol cars by 2035." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Put forward", ipa: "/pʊt ˈfɔː.wəd/", translation: "Avanzare / Proporre (una teoria, candidatura)", definition: "To state an idea or opinion, or to suggest a plan or person, for other people to consider.", example: "Several plausible hypotheses were put forward during the symposium." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Rule out", ipa: "/ruːl aʊt/", translation: "Escludere (un'ipotesi, possibilità)", definition: "To stop considering something as a possibility.", example: "Police have not yet ruled out foul play." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Stem from", ipa: "/stem frɒm/", translation: "Derivare da / Avere origine da", definition: "To start or develop as the result of something.", example: "Most communication breakdowns stem from unstated assumptions." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Water down", ipa: "/ˈwɔː.tə daʊn/", translation: "Annacquare / Attenuare (una proposta)", definition: "To deliberately make an idea or proposal less extreme or forceful.", example: "The original bill was heavily watered down before passing Parliament." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Zero in on", ipa: "/ˈzɪə.rəʊ ɪn ɒn/", translation: "Concentrarsi con precisione su / Puntare su", definition: "To direct all your attention to a particular thing.", example: "Auditors zeroed in on discrepancies in the Q3 expense reports." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Iron out", ipa: "/ˈaɪən aʊt/", translation: "Appianare / Risolvere (piccoli dettagli)", definition: "To remove problems or find solutions.", example: "We still need to iron out a few minor contractual details." },
+      { source: "CORE VAULT", category: "Phrasal Verb • C1", pos: "phrasal verb", register: "Neutral", main: "Narrow down", ipa: "/ˈnær.əʊ daʊn/", translation: "Restringere il campo (scelte, opzioni)", definition: "To reduce the number of possibilities or choices.", example: "We've narrowed the list of candidates down to three finalists." },
+
+      // ACADEMIC & FORMAL
+      { source: "CORE VAULT", category: "Academic • C1", pos: "preposition", register: "Formal / Academic", main: "Notwithstanding", ipa: "/ˌnɒt.wɪðˈstæn.dɪŋ/", translation: "Nonostante / Ciò nonostante", definition: "Despite the fact or thing mentioned.", example: "Notwithstanding some initial skepticism, the pilot program yielded remarkable results." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "phrase", register: "Formal / Academic", main: "In light of", ipa: "/ɪn laɪt əv/", translation: "Alla luce di / Considerando", definition: "Because of a particular fact or situation.", example: "In light of recent findings, the committee decided to revise its guidelines." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "phrase", register: "Formal / Academic", main: "Shed light on", ipa: "/ʃed laɪt ɒn/", translation: "Far luce su / Chiarire", definition: "To help to explain a situation or provide new information about it.", example: "These newly discovered letters shed light on the poet's early life." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "adjective", register: "Formal / Academic", main: "Conducive to", ipa: "/kənˈdʒuː.sɪv tuː/", translation: "Favorevole a / Che favorisce", definition: "Providing the right conditions for something good to happen or exist.", example: "An open-plan office is not always conducive to deep concentration." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "conjunction", register: "Formal / Academic", main: "Albeit", ipa: "/ɔːlˈbiː.ɪt/", translation: "Sebbene / Anche se", definition: "Although (used to introduce a conceding phrase rather than a full clause).", example: "The recovery has been steady, albeit slower than economists had anticipated." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "phrase", register: "Formal / Academic", main: "By the same token", ipa: "/baɪ ðə seɪm ˈtəʊ.kən/", translation: "Allo stesso modo / Per la stessa ragione", definition: "In the same way or for the same reason.", example: "Exercise improves physical health; by the same token, it boosts cognitive resilience." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "conjunction", register: "Formal / Academic", main: "Insofar as", ipa: "/ˌɪn.səʊˈfɑːr æz/", translation: "Nella misura in cui", definition: "To the degree that.", example: "The policy is effective insofar as it addresses the root causes of inequality." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "noun", register: "Formal / Academic", main: "Caveat", ipa: "/ˈkæv.i.æt/", translation: "Avvertenza / Riserva / Condizione", definition: "A warning to consider something before taking any more action, or a statement that limits a general claim.", example: "The results are promising, with the caveat that the study only lasted six weeks." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "adjective", register: "Formal / Academic", main: "Ubiquitous", ipa: "/juːˈbɪk.wɪ.təs/", translation: "Onnipresente / Diffuso ovunque", definition: "Seeming to be everywhere at the same time.", example: "Smartphones have become ubiquitous in modern urban life." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "adjective", register: "Formal / Academic", main: "Paramount", ipa: "/ˈpær.ə.maʊnt/", translation: "Di fondamentale importanza / Supremo", definition: "More important than anything else.", example: "Data privacy is of paramount importance in healthcare applications." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "verb", register: "Formal / Academic", main: "Exacerbate", ipa: "/ɪɡˈzæs.ə.beɪt/", translation: "Esacerbare / Aggravare", definition: "To make something that is already bad even worse.", example: "Unplanned urban sprawl has exacerbated traffic congestion." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "verb", register: "Formal / Academic", main: "Corroborate", ipa: "/kəˈrɒb.ə.reɪt/", translation: "Corroborare / Confermare con prove", definition: "To add proof to an account, statement, or idea with new information.", example: "Independent laboratory tests corroborated the initial findings." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "adjective", register: "Formal / Academic", main: "Tantamount to", ipa: "/ˈtæn.tə.maʊnt tuː/", translation: "Equivalente a / Pari a", definition: "Being almost the same or having the same effect as something, usually something bad.", example: "Refusing to act now is tantamount to accepting irreversible damage." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "phrase", register: "Formal / Neutral", main: "In retrospect", ipa: "/ɪn ˈret.rə.spekt/", translation: "Col senno di poi / Ripensandoci", definition: "Thinking now about something in the past.", example: "In retrospect, we underestimated how quickly consumer habits would shift." },
+      { source: "CORE VAULT", category: "Academic • C1", pos: "verb", register: "Formal / Academic", main: "Substantiate", ipa: "/səbˈstæn.ʃi.eɪt/", translation: "Sostanziare / Comprovare con dati", definition: "To provide evidence to support or prove the truth of.", example: "They failed to substantiate their claims with reliable empirical data." }
+    ];
+
+    // -----------------------------------------------------------------------
+    // B. C1 GRAMMAR TEMPLATES
+    // -----------------------------------------------------------------------
+    const GRAMMAR_DECK = [
+      { source: "C1 GRAMMAR", category: "Negative Inversion", pos: "grammar", register: "Formal / Written", main: "Seldom ______ such a compelling display of diplomatic skill.", ipa: "", hint: "Completa con inversione ausiliare + soggetto (present perfect di 'witness')", answer: "have I witnessed", translation: "Raramente ho assistito a una simile dimostrazione di abilità diplomatica.", definition: "After negative/restrictive adverbs at the start of a clause (Seldom, Rarely, Never), invert auxiliary + subject.", example: "Seldom have I witnessed such a compelling display of diplomatic skill.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Negative Inversion", pos: "grammar", register: "Formal / Written", main: "Not only ______ the deadline, but she also exceeded every KPI.", ipa: "", hint: "Completa con inversione al past simple ('meet')", answer: "did she meet", translation: "Non solo ha rispettato la scadenza, ma ha anche superato ogni KPI.", definition: "With 'Not only... but also' at the beginning of a sentence, invert the first clause ('did she meet').", example: "Not only did she meet the deadline, but she also exceeded every KPI.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Negative Inversion", pos: "grammar", register: "Formal / Written", main: "Under no circumstances ______ this confidential data be shared externally.", ipa: "", hint: "Completa con il modale di dovere/obbligo", answer: "should", translation: "In nessun caso questi dati riservati devono essere condivisi all'esterno.", definition: "'Under no circumstances' triggers subject-auxiliary inversion.", example: "Under no circumstances should this confidential data be shared externally.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Negative Inversion", pos: "grammar", register: "Formal / Literary", main: "Little ______ that their small prototype would revolutionize the industry.", ipa: "", hint: "Completa con inversione al past simple ('they / know')", answer: "did they know", translation: "Non sapevano affatto che il loro piccolo prototipo avrebbe rivoluzionato il settore.", definition: "'Little' used with a negative meaning at the start of a clause requires inversion ('did they know').", example: "Little did they know that their small prototype would revolutionize the industry.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Negative Inversion", pos: "grammar", register: "Formal / Written", main: "Hardly ______ the presentation when the fire alarm went off.", ipa: "", hint: "Completa con past perfect invertito ('he / begin')", answer: "had he begun", translation: "Aveva appena iniziato la presentazione quando è suonato l'allarme antincendio.", definition: "'Hardly + had + subject + past participle ... when' expresses immediate succession.", example: "Hardly had he begun the presentation when the fire alarm went off.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Inverted Conditionals", pos: "grammar", register: "Formal / Written", main: "______ the board approved the budget earlier, we would be launching today.", ipa: "", hint: "Ometti 'If' nella 3rd-to-2nd Mixed Conditional", answer: "Had", translation: "Se il consiglio avesse approvato il budget prima, oggi staremmo lanciando.", definition: "3rd-to-2nd Mixed Conditional with 'If' omitted: 'Had + subject + past participle'.", example: "Had the board approved the budget earlier, we would be launching today.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Inverted Conditionals", pos: "grammar", register: "Formal / Written", main: "______ it not for her timely intervention, the project would have collapsed.", ipa: "", hint: "Equivalente formale di 'If it weren't for'", answer: "Were", translation: "Se non fosse stato per il suo intervento tempestivo, il progetto sarebbe crollato.", definition: "'Were it not for + noun' is the formal inverted equivalent of 'If it weren't for'.", example: "Were it not for her timely intervention, the project would have collapsed.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Inverted Conditionals", pos: "grammar", register: "Formal / Business", main: "______ you require any further clarification, please do not hesitate to contact us.", ipa: "", hint: "Inversione formale del 1° condizionale", answer: "Should", translation: "Qualora aveste bisogno di ulteriori chiarimenti, non esitate a contattarci.", definition: "1st Conditional formal inversion: 'Should + subject + bare infinitive' replaces 'If you should...'.", example: "Should you require any further clarification, please do not hesitate to contact us.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Mandative Subjunctive", pos: "grammar", register: "Formal / Legal", main: "The committee recommended that the CEO ______ immediately.", ipa: "", hint: "Congiuntivo mandativo del verbo 'resign'", answer: "resign", translation: "Il comitato ha raccomandato che l'amministratore delegato si dimetta immediatamente.", definition: "After verbs of urgency/recommendation (recommend, insist, demand), use the bare infinitive ('resign', no -s).", example: "The committee recommended that the CEO resign immediately.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Mandative Subjunctive", pos: "grammar", register: "Formal / Official", main: "It is imperative that every applicant ______ notified prior to Friday.", ipa: "", hint: "Ausiliare passivo del congiuntivo mandativo", answer: "be", translation: "È imperativo che ogni candidato venga avvisato prima di venerdì.", definition: "Passive mandative subjunctive uses 'be + past participle' regardless of the subject.", example: "It is imperative that every applicant be notified prior to Friday.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Cleft Sentences", pos: "grammar", register: "Neutral / Formal", main: "______ we need right now is a pragmatic, long-term strategy.", ipa: "", hint: "Pronome per pseudo-cleft sentence", answer: "What", translation: "Ciò di cui abbiamo bisogno adesso è una strategia pragmatica a lungo termine.", definition: "Pseudo-cleft sentence ('What + clause + be') shifts focus onto the complement.", example: "What we need right now is a pragmatic, long-term strategy.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Cleft Sentences", pos: "grammar", register: "Formal / Emphatic", main: "It was not until the audit ______ the discrepancy came to light.", ipa: "", hint: "Congiunzione di chiusura della cleft sentence", answer: "that", translation: "Fu solo al momento della revisione contabile che la discrepanza venne alla luce.", definition: "'It was not until X that Y' emphasizes the exact moment something happened.", example: "It was not until the audit that the discrepancy came to light.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Participle Clauses", pos: "grammar", register: "Formal / Narrative", main: "______ through the contract twice, she spotted a hidden penalty clause.", ipa: "", hint: "Perfect participle attivo di 'read'", answer: "Having read", translation: "Avendo letto il contratto due volte, ha individuato una clausola penale nascosta.", definition: "Perfect participle ('Having + past participle') shows an action completed before the main verb.", example: "Having read through the contract twice, she spotted a hidden penalty clause.", isGrammar: true },
+      { source: "C1 GRAMMAR", category: "Advanced Modals", pos: "grammar", register: "Neutral / Spoken", main: "She ______ have missed the train—her coat is still hanging in the hallway.", ipa: "", hint: "Modale di deduzione negativa certa nel passato", answer: "can't", translation: "Non può aver perso il treno: il suo cappotto è ancora appeso nell'ingresso.", definition: "'Can't have + past participle' expresses near certainty that a past event did NOT happen.", example: "She can't have missed the train—her coat is still hanging in the hallway.", isGrammar: true }
+    ];
+
+    // -----------------------------------------------------------------------
+    // C. LIVE VOCABULARY STREAM (ALL CATEGORIES MERGED TOGETHER)
+    // -----------------------------------------------------------------------
+    const LIVE_SEEDS = [
+      "paradigm", "pragmatic", "nuance", "scrutiny", "ubiquitous", "ambiguous", "synthesize", "empirical", "cohesive", "dichotomy", "ephemeral", "intrinsic", "plausible", "eloquent",
+      "leverage", "lucrative", "volatility", "contingency", "stagnation", "monopoly", "incentive", "benchmark", "surplus", "merger", "subsidy", "arbitrage", "feasibility", "diversify", "insolvency",
+      "jurisdiction", "precedent", "sovereignty", "consensus", "mandate", "sanction", "impartial", "litigation", "autonomy", "advocate", "deterrent", "ratify", "amendment", "accountability", "bureaucracy",
+      "resilience", "cognitive", "empathy", "altruism", "apathy", "introspection", "catharsis", "bias", "subconscious", "propensity", "ambivalence", "compulsion", "perception", "burnout", "astute",
+      "mitigate", "catalyst", "biodiversity", "sustainable", "depletion", "equilibrium", "anomaly", "finite", "renewable", "contaminate", "resilient", "ecosystem", "threshold", "emission", "synthesis"
+    ];
+
+    const FALLBACK_LIVE = [
+      { source: "LIVE STREAM", category: "Vocabulary • C1", pos: "adjective", register: "Formal / Academic", main: "Pragmatic", ipa: "/præɡˈmæt.ɪk/", translation: "Pragmatico, pratico, concreto (basato sui fatti anziché sulle teorie)", definition: "Dealing with things sensibly and realistically in a way that is based on practical rather than theoretical considerations.", example: "We need to adopt a pragmatic approach to solving the budget deficit." },
+      { source: "LIVE STREAM", category: "Vocabulary • C1", pos: "noun", register: "Formal / Academic", main: "Scrutiny", ipa: "/ˈskruː.tɪ.ni/", translation: "Esame minuzioso, scrutinio attento, controllo critico", definition: "Critical observation or examination.", example: "The company's accounting practices have come under intense public scrutiny." },
+      { source: "LIVE STREAM", category: "Vocabulary • C1", pos: "adjective", register: "Formal / Academic", main: "Ephemeral", ipa: "/ɪˈfem.ər.əl/", translation: "Effimero, di breve durata, transitorio", definition: "Lasting for a very short time.", example: "Fame in the age of social media is often intense yet ephemeral." },
+      { source: "LIVE STREAM", category: "Vocabulary • C1", pos: "noun", register: "Formal / Academic", main: "Resilience", ipa: "/rɪˈzɪl.jəns/", translation: "Resilienza, capacità di ripresa e adattamento", definition: "The capacity to withstand or to recover quickly from difficulties; toughness.", example: "Psychological resilience helps individuals navigate high-stress environments." }
+    ];
+
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function capitalize(str) {
+      return str ? str.charAt(0).toUpperCase() + str.slice(1) : "";
+    }
+
+    async function fetchLiveVocabulary(count = 20) {
+      const picked = shuffle(LIVE_SEEDS).slice(0, 3);
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        const dmResponses = await Promise.all(
+          picked.map(s =>
+            fetch(`https://api.datamuse.com/words?ml=${encodeURIComponent(s)}&max=14`, { signal: controller.signal })
+              .then(r => r.json())
+              .catch(() => [])
+          )
+        );
+        clearTimeout(timeoutId);
+
+        const words = dmResponses.flat()
+          .filter(w => /^[a-z]{6,15}$/i.test(w.word))
+          .map(w => w.word);
+
+        const pool = shuffle(Array.from(new Set([...picked, ...words]))).slice(0, count + 6);
+        const cards = [];
+
+        await Promise.all(pool.map(async (word) => {
+          if (cards.length >= count) return;
+          try {
+            const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            const entry = data[0];
+            if (!entry || !entry.meanings || !entry.meanings.length) return;
+
+            const meaning = entry.meanings[0];
+            const defObj = meaning.definitions.find(d => d.example) || meaning.definitions[0];
+            if (!defObj) return;
+
+            const ipa = entry.phonetic || (entry.phonetics && entry.phonetics.find(p => p.text)?.text) || "";
+            const pos = meaning.partOfSpeech || "vocabulary";
+
+            cards.push({
+              source: "LIVE STREAM",
+              category: `${capitalize(pos)} • C1`,
+              pos: pos,
+              register: "Formal / Academic",
+              main: capitalize(entry.word),
+              ipa: ipa,
+              translation: `Lemma C1 (${pos}). Consulta la definizione e l'esempio in contesto.`,
+              definition: defObj.definition,
+              example: defObj.example || `In advanced English, "${entry.word}" is used to convey precision.`
+            });
+          } catch (_) {}
+        }));
+
+        return cards.length > 0 ? shuffle(cards) : shuffle(FALLBACK_LIVE);
+      } catch (_) {
+        return shuffle(FALLBACK_LIVE);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // D. PERSISTENT STORAGE FOR SAVED & MANUAL CARDS (localStorage)
+    // -----------------------------------------------------------------------
+    const STORAGE_KEY = "lexisc1_saved_cards_v1";
+
+    function loadSavedCards() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function persistSavedCards(list) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      } catch (_) {}
+      updateSavedBadges();
+    }
+
+    let savedCards = loadSavedCards();
+
+    function updateSavedBadges() {
+      const badge = document.getElementById("saved-total-badge");
+      if (badge) badge.textContent = savedCards.length;
+    }
+
+    function isCardSaved(card) {
+      if (!card || card.isPlaceholder) return false;
+      return savedCards.some(c => c.main.toLowerCase() === card.main.toLowerCase());
+    }
+
+    function toggleSaveCurrentCard(e) {
+      if (e) e.stopPropagation();
+      const card = state.deck[state.index];
+      if (!card || card.isPlaceholder) return;
+
+      const idx = savedCards.findIndex(c => c.main.toLowerCase() === card.main.toLowerCase());
+      if (idx >= 0) {
+        savedCards.splice(idx, 1);
+        persistSavedCards(savedCards);
+        showToast("Rimossa da ⭐ Salvate");
+        if (state.mode === "saved") {
+          regenerateCurrentDeck();
+          return;
+        }
+      } else {
+        savedCards.unshift({ ...card, savedAt: Date.now() });
+        persistSavedCards(savedCards);
+        showToast("Salvata in ⭐ Salvate!");
+      }
+      updateStarButtons();
+    }
+
+    function updateStarButtons() {
+      const card = state.deck[state.index];
+      const saved = isCardSaved(card);
+      ["btn-star-front", "btn-star-back"].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = saved ? "★" : "☆";
+        if (saved) {
+          el.classList.add("text-amber-500", "bg-amber-50", "dark:bg-amber-950/60", "border-amber-300", "dark:border-amber-700");
+          el.classList.remove("text-slate-400");
+        } else {
+          el.classList.remove("text-amber-500", "bg-amber-50", "dark:bg-amber-950/60", "border-amber-300", "dark:border-amber-700");
+          el.classList.add("text-slate-400");
+        }
+      });
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      if (!t) return;
+      t.textContent = msg;
+      t.classList.remove("-translate-y-20", "opacity-0");
+      t.classList.add("translate-y-0", "opacity-100");
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        t.classList.add("-translate-y-20", "opacity-0");
+        t.classList.remove("translate-y-0", "opacity-100");
+      }, 2100);
+    }
+
+    // -----------------------------------------------------------------------
+    // E. APP STATE & NAVIGATION
+    // -----------------------------------------------------------------------
+    const state = {
+      mode: "daily",
+      subFilter: "ALL",
+      deck: [],
+      index: 0,
+      flipped: false,
+      accent: "en-GB",
+      speechRates: [1.0, 0.85, 1.15],
+      rateIdx: 0,
+      stats: { again: 0, hard: 0, mastered: new Set() }
+    };
+
+    function renderSubControls() {
+      const container = document.getElementById("sub-controls-left");
+      container.innerHTML = "";
+      let pills = [];
+
+      if (state.mode === "daily") {
+        pills = [
+          { id: "ALL", label: "Mix Completo" },
+          { id: "VAULT", label: "Solo Idioms & Phrasal" },
+          { id: "GRAMMAR", label: "Solo Grammar" },
+          { id: "LIVE", label: "Solo Vocabulary" }
+        ];
+      } else if (state.mode === "live") {
+        pills = [
+          { id: "ALL", label: "Tutti i lemmi C1 combinati" }
+        ];
+      } else if (state.mode === "grammar") {
+        pills = [
+          { id: "ALL", label: "Tutte" },
+          { id: "Negative Inversion", label: "Inversion" },
+          { id: "Inverted Conditionals", label: "Conditionals" },
+          { id: "Mandative Subjunctive", label: "Subjunctive" },
+          { id: "Cleft Sentences", label: "Cleft" }
+        ];
+      } else if (state.mode === "vault") {
+        pills = [
+          { id: "ALL", label: "Tutto" },
+          { id: "Idiom", label: "Idioms" },
+          { id: "Phrasal Verb", label: "Phrasal Verbs" },
+          { id: "Academic", label: "Academic" }
+        ];
+      } else if (state.mode === "saved") {
+        pills = [
+          { id: "ALL", label: "Tutte le salvate" },
+          { id: "MANUAL", label: "Solo inserite manualmente" }
+        ];
+      }
+
+      pills.forEach(p => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        const active = state.subFilter === p.id;
+        btn.className = `tap-btn shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium ${
+          active
+            ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 font-semibold"
+            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+        }`;
+        btn.textContent = p.label;
+        btn.onclick = () => {
+          state.subFilter = p.id;
+          renderSubControls();
+          regenerateCurrentDeck();
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    async function switchMode(newMode) {
+      state.mode = newMode;
+      state.subFilter = "ALL";
+      document.querySelectorAll(".mode-tab").forEach(btn => {
+        btn.classList.remove("bg-indigo-600", "text-white", "shadow-xs");
+        btn.classList.add("bg-slate-100", "dark:bg-slate-800", "text-slate-700", "dark:text-slate-300");
+      });
+      const activeTab = document.getElementById(`tab-${newMode}`);
+      if (activeTab) {
+        activeTab.classList.remove("bg-slate-100", "dark:bg-slate-800", "text-slate-700", "dark:text-slate-300");
+        activeTab.classList.add("bg-indigo-600", "text-white", "shadow-xs");
+      }
+      renderSubControls();
+      await regenerateCurrentDeck();
+    }
+
+    async function regenerateCurrentDeck() {
+      const loadingEl = document.getElementById("loading-state");
+      const cardEl = document.getElementById("card-wrapper");
+      state.flipped = false;
+      document.getElementById("flashcard-inner").classList.remove("rotate-y-180");
+      state.index = 0;
+
+      if (state.mode === "daily" || state.mode === "live") {
+        loadingEl.classList.remove("hidden");
+        cardEl.classList.add("hidden");
+      }
+
+      if (state.mode === "daily") {
+        const live = await fetchLiveVocabulary(16);
+        const gram = shuffle(GRAMMAR_DECK).slice(0, 14);
+        const vault = shuffle(CORE_VAULT).slice(0, 20);
+        let combined = shuffle([...live, ...gram, ...vault]);
+        if (state.subFilter === "VAULT") combined = vault;
+        if (state.subFilter === "GRAMMAR") combined = gram;
+        if (state.subFilter === "LIVE") combined = live;
+        state.deck = combined;
+      } else if (state.mode === "live") {
+        state.deck = await fetchLiveVocabulary(24);
+      } else if (state.mode === "grammar") {
+        const list = state.subFilter === "ALL"
+          ? GRAMMAR_DECK
+          : GRAMMAR_DECK.filter(c => c.category === state.subFilter);
+        state.deck = shuffle(list);
+      } else if (state.mode === "vault") {
+        const list = state.subFilter === "ALL"
+          ? CORE_VAULT
+          : CORE_VAULT.filter(c => c.category.startsWith(state.subFilter));
+        state.deck = shuffle(list);
+      } else if (state.mode === "saved") {
+        let list = [...savedCards];
+        if (state.subFilter === "MANUAL") {
+          list = list.filter(c => c.isManual);
+        }
+        if (list.length === 0) {
+          list = [{
+            isPlaceholder: true,
+            source: "ARCHIVIO VUOTO",
+            category: "Guida Rapida",
+            pos: "info",
+            register: "Nessuna carta salvata",
+            main: "Nessuna flashcard salvata",
+            ipa: "",
+            translation: "Tocca la stellina ☆ su qualsiasi carta oppure premi '+ Crea' in alto a destra.",
+            definition: "Puoi salvare qualsiasi carta dei mazzi oppure creare le tue flashcard singole o incollando i tuoi appunti.",
+            example: "Premi '+ Crea' in alto per iniziare subito!"
+          }];
+        }
+        state.deck = list;
+      }
+
+      loadingEl.classList.add("hidden");
+      cardEl.classList.remove("hidden");
+      renderCurrentCard();
+    }
+
+    function shuffleCurrentDeck() {
+      if (state.deck.length <= 1) return;
+      state.deck = shuffle(state.deck);
+      state.index = 0;
+      renderCurrentCard();
+      showToast("Mazzo mescolato 🔀");
+    }
+
+    function renderCurrentCard() {
+      if (!state.deck.length) return;
+      const card = state.deck[state.index];
+
+      state.flipped = false;
+      document.getElementById("flashcard-inner").classList.remove("rotate-y-180");
+
+      document.getElementById("front-badge-source").textContent = card.source || "LEXIS C1";
+      document.getElementById("front-badge-category").textContent = card.category || "C1";
+      document.getElementById("front-kicker").textContent = card.isGrammar ? "COMPLETA LA STRUTTURA C1" : "ESPRESSIONE / VOCABOLO";
+      document.getElementById("front-main-text").textContent = card.main;
+
+      const ipaEl = document.getElementById("front-phonetic");
+      if (card.ipa) {
+        ipaEl.textContent = card.ipa;
+        ipaEl.classList.remove("hidden");
+      } else {
+        ipaEl.classList.add("hidden");
+      }
+
+      document.getElementById("front-hint-text").textContent = card.hint ? card.hint : `"${card.example}"`;
+      document.getElementById("front-register").textContent = card.register || "C1 Level";
+
+      // Active recall box for grammar
+      const recallBox = document.getElementById("active-recall-box");
+      if (card.isGrammar) {
+        recallBox.classList.remove("hidden");
+        document.getElementById("recall-input").value = "";
+        document.getElementById("recall-feedback").textContent = "";
+      } else {
+        recallBox.classList.add("hidden");
+      }
+
+      // Back face
+      document.getElementById("back-title").textContent = card.isGrammar ? card.answer : card.main;
+      document.getElementById("back-pos").textContent = card.pos || "C1";
+      document.getElementById("back-ipa").textContent = card.ipa || card.category;
+      document.getElementById("back-translation").textContent = card.translation;
+      document.getElementById("back-definition").textContent = card.definition;
+      document.getElementById("back-example").textContent = `"${card.example}"`;
+
+      // Counters & Segmented Progress
+      document.getElementById("stat-current").textContent = state.index + 1;
+      document.getElementById("stat-total").textContent = state.deck.length;
+      document.getElementById("stat-again").textContent = state.stats.again;
+      document.getElementById("stat-hard").textContent = state.stats.hard;
+      document.getElementById("stat-mastered").textContent = state.stats.mastered.size;
+
+      const total = Math.max(state.deck.length, 1);
+      const pctMastered = Math.min(100, (state.stats.mastered.size / total) * 100);
+      const pctHard = Math.min(100 - pctMastered, (state.stats.hard / total) * 100);
+      const pctAgain = Math.min(100 - pctMastered - pctHard, (state.stats.again / total) * 100);
+      document.getElementById("bar-mastered").style.width = `${pctMastered}%`;
+      document.getElementById("bar-hard").style.width = `${pctHard}%`;
+      document.getElementById("bar-again").style.width = `${pctAgain}%`;
+
+      updateStarButtons();
+    }
+
+    function handleCardClick(e) {
+      if (e.target.closest("button, input, select, textarea")) return;
+      flipCard();
+    }
+
+    function flipCard() {
+      state.flipped = !state.flipped;
+      document.getElementById("flashcard-inner").classList.toggle("rotate-y-180", state.flipped);
+    }
+
+    function nextCard() {
+      if (!state.deck.length) return;
+      state.index = (state.index + 1) % state.deck.length;
+      renderCurrentCard();
+    }
+
+    function prevCard() {
+      if (!state.deck.length) return;
+      state.index = (state.index - 1 + state.deck.length) % state.deck.length;
+      renderCurrentCard();
+    }
+
+    function rateCard(rating) {
+      const card = state.deck[state.index];
+      if (!card) return;
+      if (rating === "good") {
+        state.stats.mastered.add(card.main);
+      } else if (rating === "hard") {
+        state.stats.hard++;
+        const pos = Math.min(state.index + 5, state.deck.length);
+        state.deck.splice(pos, 0, card);
+      } else if (rating === "again") {
+        state.stats.again++;
+        state.stats.mastered.delete(card.main);
+        const pos = Math.min(state.index + 3, state.deck.length);
+        state.deck.splice(pos, 0, card);
+      }
+      nextCard();
+    }
+
+    function checkRecallAnswer() {
+      const card = state.deck[state.index];
+      if (!card || !card.answer) return;
+      const val = document.getElementById("recall-input").value.trim().toLowerCase();
+      const exp = card.answer.trim().toLowerCase();
+      const fb = document.getElementById("recall-feedback");
+      if (val === exp) {
+        fb.className = "mt-1.5 text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400";
+        fb.textContent = `✓ Corretto! "${card.answer}"`;
+      } else {
+        fb.className = "mt-1.5 text-xs font-mono font-semibold text-amber-600 dark:text-amber-400";
+        fb.textContent = `Soluzione: "${card.answer}"`;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // F. AUDIO & THEME CONTROLS
+    // -----------------------------------------------------------------------
+    function setAccent(lang) {
+      state.accent = lang;
+      const gb = document.getElementById("btn-accent-gb");
+      const us = document.getElementById("btn-accent-us");
+      if (lang === "en-GB") {
+        gb.className = "tap-btn px-2 py-1 rounded-md text-[11px] font-mono font-bold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs";
+        us.className = "tap-btn px-2 py-1 rounded-md text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400";
+      } else {
+        us.className = "tap-btn px-2 py-1 rounded-md text-[11px] font-mono font-bold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs";
+        gb.className = "tap-btn px-2 py-1 rounded-md text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400";
+      }
+    }
+
+    function cycleSpeechRate() {
+      state.rateIdx = (state.rateIdx + 1) % state.speechRates.length;
+      document.getElementById("btn-rate").textContent = state.speechRates[state.rateIdx].toFixed(2).replace(/\.00$/, ".0") + "x";
+    }
+
+    function speakText(text) {
+      if (!("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      const clean = text.replace(/______/g, "blank");
+      const u = new SpeechSynthesisUtterance(clean);
+      u.lang = state.accent;
+      u.rate = state.speechRates[state.rateIdx];
+      window.speechSynthesis.speak(u);
+    }
+
+    function speakFront(e) {
+      if (e) e.stopPropagation();
+      const card = state.deck[state.index];
+      if (card) speakText(card.isGrammar ? card.example : card.main);
+    }
+
+    function speakBack(e) {
+      if (e) e.stopPropagation();
+      const card = state.deck[state.index];
+      if (card) speakText(card.example);
+    }
+
+    function toggleTheme() {
+      const html = document.documentElement;
+      if (html.classList.contains("dark")) {
+        html.classList.remove("dark");
+        html.classList.add("light");
+      } else {
+        html.classList.remove("light");
+        html.classList.add("dark");
+      }
+    }
+
+    function toggleShortcutsModal() {
+      document.getElementById("shortcuts-modal").classList.toggle("hidden");
+    }
+
+    // -----------------------------------------------------------------------
+    // G. MANUAL CREATOR MODAL LOGIC
+    // -----------------------------------------------------------------------
+    function openCreatorModal() {
+      document.getElementById("creator-modal").classList.remove("hidden");
+    }
+
+    function closeCreatorModal() {
+      document.getElementById("creator-modal").classList.add("hidden");
+    }
+
+    function switchCreatorTab(tab) {
+      const sForm = document.getElementById("creator-single-form");
+      const bForm = document.getElementById("creator-bulk-form");
+      const sBtn = document.getElementById("m-tab-single");
+      const bBtn = document.getElementById("m-tab-bulk");
+
+      if (tab === "single") {
+        sForm.classList.remove("hidden");
+        bForm.classList.add("hidden");
+        sBtn.className = "py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs";
+        bBtn.className = "py-2 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400";
+      } else {
+        bForm.classList.remove("hidden");
+        sForm.classList.add("hidden");
+        bBtn.className = "py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs";
+        sBtn.className = "py-2 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400";
+      }
+    }
+
+    function saveSingleManualCard() {
+      const term = document.getElementById("in-term").value.trim();
+      const trans = document.getElementById("in-translation").value.trim();
+      const def = document.getElementById("in-definition").value.trim();
+      const ex = document.getElementById("in-example").value.trim();
+      const cat = document.getElementById("in-category").value;
+
+      if (!term || !trans) {
+        showToast("⚠️ Inserisci almeno Termine e Significato");
+        return;
+      }
+
+      savedCards.unshift({
+        source: "APPUNTI",
+        category: `${cat} • C1`,
+        pos: cat.toLowerCase(),
+        register: "Personale",
+        main: term,
+        ipa: "",
+        translation: trans,
+        definition: def || "Flashcard inserita manualmente.",
+        example: ex || term,
+        isManual: true,
+        savedAt: Date.now()
+      });
+
+      persistSavedCards(savedCards);
+      document.getElementById("in-term").value = "";
+      document.getElementById("in-translation").value = "";
+      document.getElementById("in-definition").value = "";
+      document.getElementById("in-example").value = "";
+      closeCreatorModal();
+      showToast("Flashcard creata e salvata! ⭐");
+
+      if (state.mode === "saved") regenerateCurrentDeck();
+      else updateStarButtons();
+    }
+
+    function saveBulkManualCards() {
+      const raw = document.getElementById("in-bulk").value.trim();
+      if (!raw) {
+        showToast("⚠️ Incolla almeno una riga di appunti");
+        return;
+      }
+
+      const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      let count = 0;
+
+      lines.reverse().forEach(line => {
+        let mainPart = line;
+        let examplePart = "";
+        if (line.includes("|")) {
+          const parts = line.split("|");
+          mainPart = parts[0].trim();
+          examplePart = parts.slice(1).join("|").trim();
+        }
+
+        const match = mainPart.match(/^(.+?)\s*(?:-|:|=|–|—)\s*(.+)$/);
+        const term = match ? match[1].trim() : mainPart;
+        const trans = match ? match[2].trim() : "Appunto salvato";
+
+        savedCards.unshift({
+          source: "APPUNTI",
+          category: "Appunti • C1",
+          pos: "note",
+          register: "Importato",
+          main: term,
+          ipa: "",
+          translation: trans,
+          definition: "Appunto importato manualmente.",
+          example: examplePart || term,
+          isManual: true,
+          savedAt: Date.now()
+        });
+        count++;
+      });
+
+      persistSavedCards(savedCards);
+      document.getElementById("in-bulk").value = "";
+      closeCreatorModal();
+      showToast(`Importate ${count} flashcard! ⭐`);
+
+      if (state.mode === "saved") regenerateCurrentDeck();
+      else updateStarButtons();
+    }
+
+    // -----------------------------------------------------------------------
+    // H. TOUCH SWIPE & KEYBOARD SHORTCUTS
+    // -----------------------------------------------------------------------
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const cardWrapper = document.getElementById("card-wrapper");
+
+    cardWrapper.addEventListener("touchstart", e => {
+      touchStartX = e.changedTouches[0].screenX;
+      touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+
+    cardWrapper.addEventListener("touchend", e => {
+      const dx = e.changedTouches[0].screenX - touchStartX;
+      const dy = e.changedTouches[0].screenY - touchStartY;
+      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        if (dx < 0) nextCard();
+        else prevCard();
+      }
+    }, { passive: true });
+
+    document.addEventListener("keydown", e => {
+      const active = document.activeElement;
+      if (active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)) return;
+      if (e.code === "Space") { e.preventDefault(); flipCard(); }
+      else if (e.code === "ArrowRight") nextCard();
+      else if (e.code === "ArrowLeft") prevCard();
+      else if (e.key.toLowerCase() === "a") speakFront();
+      else if (e.key.toLowerCase() === "s") toggleSaveCurrentCard();
+      else if (e.key === "1") rateCard("again");
+      else if (e.key === "2") rateCard("hard");
+      else if (e.key === "3") rateCard("good");
+    });
+
+    // -----------------------------------------------------------------------
+    // I. BOOTSTRAP (INSTANT RENDER WITH ZERO BLOCKING)
+    // -----------------------------------------------------------------------
+    document.getElementById("vault-total-badge").textContent = CORE_VAULT.length;
+    updateSavedBadges();
+
+    // Render immediate local cards first so the screen is NEVER stuck on Loading
+    state.deck = shuffle([...CORE_VAULT.slice(0, 20), ...GRAMMAR_DECK.slice(0, 10)]);
+    renderSubControls();
+    renderCurrentCard();
+
+    // Then silently enrich Daily Mix with live API vocabulary in background
+    fetchLiveVocabulary(16).then(liveCards => {
+      if (state.mode === "daily" && state.index === 0 && liveCards.length > 0) {
+        state.deck = shuffle([
+          ...liveCards,
+          ...shuffle(GRAMMAR_DECK).slice(0, 14),
+          ...shuffle(CORE_VAULT).slice(0, 20)
+        ]);
+        renderCurrentCard();
+      }
+    });
+  </script>
+</body>
+</html>
